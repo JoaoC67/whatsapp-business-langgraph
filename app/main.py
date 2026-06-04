@@ -1,5 +1,6 @@
 import logging
 import threading
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Query
 import httpx
@@ -10,13 +11,24 @@ from pgvector.psycopg import register_vector
 from app.pipeline import HAS_LANGGRAPH, run_langgraph
 from app.settings import settings
 
-app = FastAPI(title="WhatsApp Business LangGraph API")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("uvicorn.error")
-redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+
+# ── Lazy connections ──────────────────────────────────────────────────────────
+
+_redis_client = None
+_redis_lock = threading.Lock()
+
+def get_redis_client():
+    global _redis_client
+    with _redis_lock:
+        if _redis_client is None:
+            _redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+    return _redis_client
+
+
 pg_conn = None
 _pg_lock = threading.Lock()
-
 
 def get_pg_conn():
     global pg_conn
@@ -25,6 +37,24 @@ def get_pg_conn():
             pg_conn = psycopg.connect(settings.postgres_dsn)
             register_vector(pg_conn)
     return pg_conn
+
+
+# ── App ───────────────────────────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    missing = [k for k, v in {
+        "CLAUDE_API_KEY": settings.claude_api_key,
+        "WHATSAPP_PHONE_ID": settings.whatsapp_phone_id,
+        "WHATSAPP_TOKEN": settings.whatsapp_token,
+        "POSTGRES_DSN": settings.postgres_dsn,
+    }.items() if not v]
+    if missing:
+        logger.warning(f"Variáveis não configuradas: {', '.join(missing)} — configure no Railway e faça redeploy.")
+    yield
+
+app = FastAPI(title="WhatsApp Business LangGraph API", lifespan=lifespan)
+
 
 WHATSAPP_API = f"https://graph.facebook.com/v17.0/{settings.whatsapp_phone_id}/messages"
 HEADERS = {
@@ -48,7 +78,7 @@ async def health():
     postgres_ok = False
 
     try:
-        redis_ok = await redis_client.ping()
+        redis_ok = await get_redis_client().ping()
     except Exception:
         logger.exception("Falha ao conectar com Redis")
 
@@ -99,19 +129,20 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     message_id = message.get("id")
     if message_id:
         dedup_key = f"whatsapp:msg:{message_id}"
-        if not await redis_client.set(dedup_key, "1", nx=True, ex=300):
+        if not await get_redis_client().set(dedup_key, "1", nx=True, ex=300):
             return {"status": "duplicate"}
 
     background_tasks.add_task(handle_message, sender, text)
     return {"status": "accepted"}
 
 async def handle_message(sender: str, text: str):
+    rc = get_redis_client()
     session_key = f"whatsapp:{sender}:history"
     response_text = "Desculpa, não consegui processar isso no momento."
 
     try:
-        history = await redis_client.lrange(session_key, 0, -1)
-        response_text = await run_langgraph(sender, text, history, redis_client, get_pg_conn())
+        history = await rc.lrange(session_key, 0, -1)
+        response_text = await run_langgraph(sender, text, history, rc, get_pg_conn())
     except Exception:
         logger.exception("Erro ao processar a mensagem de WhatsApp")
 
@@ -119,8 +150,8 @@ async def handle_message(sender: str, text: str):
         response_text = "Desculpa, não consegui processar isso no momento."
 
     try:
-        await redis_client.rpush(session_key, f"user: {text}", f"assistant: {response_text}")
-        await redis_client.expire(session_key, settings.session_ttl_seconds)
+        await rc.rpush(session_key, f"user: {text}", f"assistant: {response_text}")
+        await rc.expire(session_key, settings.session_ttl_seconds)
     except Exception:
         logger.exception("Erro ao atualizar histórico no Redis")
 
