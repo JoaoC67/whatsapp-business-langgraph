@@ -34,8 +34,14 @@ def get_pg_conn():
     global pg_conn
     with _pg_lock:
         if pg_conn is None:
-            pg_conn = psycopg.connect(settings.postgres_dsn)
-            register_vector(pg_conn)
+            dsn = settings.postgres_dsn
+            if dsn and "sslmode" not in dsn:
+                dsn += "?sslmode=require"
+            pg_conn = psycopg.connect(dsn)
+            try:
+                register_vector(pg_conn)
+            except Exception:
+                logger.warning("pgvector não disponível — busca semântica desabilitada")
     return pg_conn
 
 
