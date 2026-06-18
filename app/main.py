@@ -44,7 +44,7 @@ def get_pg_conn():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     missing = [k for k, v in {
-        "CLAUDE_API_KEY": settings.claude_api_key,
+        "LLM_KEY": settings.claude_api_key or settings.openai_api_key,
         "WHATSAPP_PHONE_ID": settings.whatsapp_phone_id,
         "WHATSAPP_TOKEN": settings.whatsapp_token,
         "POSTGRES_DSN": settings.postgres_dsn,

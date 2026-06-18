@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     claude_model: str = "claude-sonnet-4-6"
     openai_api_key: Optional[str] = None
     openai_api_url: Optional[str] = None
+    openai_model: str = "gpt-4o-mini"
     embedding_model: str = "text-embedding-3-large"
     session_ttl_seconds: int = 3600
     max_history_messages: int = 6
