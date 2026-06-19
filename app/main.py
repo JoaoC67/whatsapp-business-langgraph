@@ -65,14 +65,20 @@ def _init_db_schema():
     try:
         with conn.cursor() as cur:
             cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+        conn.commit()
+        try:
+            from pgvector.psycopg import register_vector as _reg
+            _reg(conn)
+        except Exception:
+            pass
+        with conn.cursor() as cur:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS documents (
                     id SERIAL PRIMARY KEY,
                     content TEXT NOT NULL,
-                    embedding vector(3072)
+                    embedding vector(1536)
                 )
             """)
-            cur.execute("CREATE INDEX IF NOT EXISTS documents_embedding_idx ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)")
         conn.commit()
         logger.info("Schema do banco inicializado com sucesso")
     except Exception:
