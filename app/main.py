@@ -3,7 +3,7 @@ import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Query
-from fastapi.responses import PlainTextResponse
+from starlette.responses import Response
 import httpx
 import redis.asyncio as redis
 import psycopg
@@ -76,7 +76,7 @@ async def verify_webhook(
     verify_token: str = Query(alias="hub.verify_token", default=None),
 ):
     if mode == "subscribe" and verify_token == settings.whatsapp_verify_token:
-        return PlainTextResponse(content=str(challenge))
+        return Response(content=str(challenge), media_type="text/plain")
     raise HTTPException(status_code=403, detail="Invalid verification token")
 
 @app.get("/health")
@@ -104,6 +104,7 @@ async def health():
 async def status():
     return {
         "app": "whatsapp-business-langgraph",
+        "version": "1.1.0",
         "langgraph_installed": HAS_LANGGRAPH,
         "claude_model": settings.claude_model,
         "embedding_model": settings.embedding_model,
