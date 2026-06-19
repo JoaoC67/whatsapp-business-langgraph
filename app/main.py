@@ -3,6 +3,7 @@ import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Query
+from fastapi.responses import PlainTextResponse
 import httpx
 import redis.asyncio as redis
 import psycopg
@@ -75,7 +76,7 @@ async def verify_webhook(
     verify_token: str = Query(alias="hub.verify_token", default=None),
 ):
     if mode == "subscribe" and verify_token == settings.whatsapp_verify_token:
-        return challenge
+        return PlainTextResponse(content=str(challenge))
     raise HTTPException(status_code=403, detail="Invalid verification token")
 
 @app.get("/health")
