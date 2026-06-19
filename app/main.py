@@ -6,8 +6,13 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Query
 from starlette.responses import Response
 import httpx
 import redis.asyncio as redis
-import psycopg
-from pgvector.psycopg import register_vector
+
+try:
+    import psycopg
+    from pgvector.psycopg import register_vector
+    HAS_POSTGRES = True
+except ImportError:
+    HAS_POSTGRES = False
 
 from app.pipeline import HAS_LANGGRAPH, run_langgraph
 from app.settings import settings
@@ -33,16 +38,21 @@ _pg_lock = threading.Lock()
 
 def get_pg_conn():
     global pg_conn
+    if not HAS_POSTGRES or not settings.postgres_dsn:
+        return None
     with _pg_lock:
         if pg_conn is None:
-            dsn = settings.postgres_dsn
-            if dsn and "sslmode" not in dsn:
-                dsn += "?sslmode=require"
-            pg_conn = psycopg.connect(dsn)
             try:
-                register_vector(pg_conn)
+                dsn = settings.postgres_dsn
+                if "sslmode" not in dsn:
+                    dsn += "?sslmode=require"
+                pg_conn = psycopg.connect(dsn)
+                try:
+                    register_vector(pg_conn)
+                except Exception:
+                    logger.warning("pgvector não disponível")
             except Exception:
-                logger.warning("pgvector não disponível — busca semântica desabilitada")
+                logger.exception("Falha ao conectar com PostgreSQL")
     return pg_conn
 
 
