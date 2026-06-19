@@ -58,6 +58,28 @@ def get_pg_conn():
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
+def _init_db_schema():
+    conn = get_pg_conn()
+    if conn is None:
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS documents (
+                    id SERIAL PRIMARY KEY,
+                    content TEXT NOT NULL,
+                    embedding vector(3072)
+                )
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS documents_embedding_idx ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)")
+        conn.commit()
+        logger.info("Schema do banco inicializado com sucesso")
+    except Exception:
+        conn.rollback()
+        logger.exception("Erro ao inicializar schema do banco")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     missing = [k for k, v in {
@@ -68,6 +90,7 @@ async def lifespan(app: FastAPI):
     }.items() if not v]
     if missing:
         logger.warning(f"Variáveis não configuradas: {', '.join(missing)} — configure no Railway e faça redeploy.")
+    _init_db_schema()
     yield
 
 app = FastAPI(title="WhatsApp Business LangGraph API", lifespan=lifespan)
