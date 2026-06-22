@@ -110,12 +110,16 @@ HEADERS = {
 
 @app.get("/webhook")
 async def verify_webhook(
+    request: Request,
     mode: str = Query(alias="hub.mode", default=None),
     challenge: str = Query(alias="hub.challenge", default=None),
     verify_token: str = Query(alias="hub.verify_token", default=None),
 ):
+    logger.info(f"META VERIFY: mode={mode} token={verify_token} ip={request.client.host}")
     if mode == "subscribe" and verify_token == settings.whatsapp_verify_token:
+        logger.info("META VERIFY: OK — challenge enviado")
         return Response(content=str(challenge), media_type="text/plain")
+    logger.warning(f"META VERIFY: FALHOU — token recebido={verify_token}")
     raise HTTPException(status_code=403, detail="Invalid verification token")
 
 @app.get("/health")
@@ -153,8 +157,10 @@ async def status():
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
+    logger.info(f"WEBHOOK POST recebido de ip={request.client.host}")
     try:
         payload = await request.json()
+        logger.info(f"WEBHOOK payload: {str(payload)[:300]}")
     except Exception:
         logger.exception("Falha ao ler payload do webhook")
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
