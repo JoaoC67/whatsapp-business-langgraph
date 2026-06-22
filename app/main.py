@@ -173,6 +173,10 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     if not sender or not text:
         return {"status": "ignored"}
 
+    # Números brasileiros: Meta entrega sem o 9 (ex: 5567XXXXXXXX → 55679XXXXXXXX)
+    if sender.startswith("55") and len(sender) == 12:
+        sender = sender[:4] + "9" + sender[4:]
+
     message_id = message.get("id")
     if message_id:
         dedup_key = f"whatsapp:msg:{message_id}"
