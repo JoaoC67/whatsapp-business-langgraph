@@ -180,8 +180,10 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
         return {"status": "ignored"}
 
     # Números brasileiros: Meta entrega sem o 9 (ex: 5567XXXXXXXX → 55679XXXXXXXX)
+    original_sender = sender
     if sender.startswith("55") and len(sender) == 12:
         sender = sender[:4] + "9" + sender[4:]
+    logger.info(f"SENDER: from={original_sender} → to={sender} text={text[:50] if text else ''!r}")
 
     message_id = message.get("id")
     if message_id:
