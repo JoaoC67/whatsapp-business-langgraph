@@ -170,6 +170,13 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     value = changes.get("value", {})
     messages = value.get("messages", [])
 
+    # Logar status de entrega (delivery receipts)
+    statuses = value.get("statuses", [])
+    if statuses:
+        for s in statuses:
+            logger.info(f"STATUS ENTREGA: id={s.get('id')} status={s.get('status')} recipient={s.get('recipient_id')} erro={s.get('errors')}")
+        return {"status": "status_update"}
+
     if not messages:
         return {"status": "no_message"}
 
